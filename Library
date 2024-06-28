@@ -1,0 +1,221 @@
+package com.example.library
+
+import android.content.Intent
+import android.os.Bundle
+import androidx.fragment.app.Fragment
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import androidx.cardview.widget.CardView
+
+
+class ProfileFragment : Fragment() {
+
+    private lateinit var cardView : CardView
+
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        // Inflate the layout for this fragment
+        return inflater.inflate(R.layout.fragment_profile, container, false)
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+
+        cardView = view.findViewById(R.id.cardView)
+
+        cardView.setOnClickListener {
+            val intent = Intent(requireContext(), editProfileActivity::class.java)
+            startActivity(intent)
+        }
+    }
+}
+
+
+val dialog = Dialog(this)
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setCancelable(false)
+        dialog.setContentView(R.layout.pop_up)
+        dialog.window?.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+
+
+package com.example.library
+
+import android.app.AlertDialog
+import android.app.Dialog
+import android.content.Intent
+import android.os.Bundle
+import android.util.Log
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.ImageView
+import android.widget.TextView
+import android.widget.Toast
+import androidx.fragment.app.Fragment
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
+import com.example.bookloan.ProcessPinjamActivity
+import com.example.library.API.apiclient
+import com.example.library.Respon.Buku
+import com.example.library.Respon.BukuResponse
+import retrofit2.Call
+import retrofit2.Callback
+import retrofit2.Response
+
+class HomeFragment : Fragment(), BookAdapter.OnItemClickListener {
+
+    private lateinit var bookAdapter: BookAdapter
+    private lateinit var bookRecyclerView: RecyclerView
+
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View? {
+        val view = inflater.inflate(R.layout.fragment_home, container, false)
+
+        bookRecyclerView = view.findViewById(R.id.rv_books)
+
+        bookAdapter = BookAdapter(emptyList(), this)
+        bookRecyclerView.layoutManager = LinearLayoutManager(context)
+        bookRecyclerView.adapter = bookAdapter
+
+        loadBooks()
+
+        return view
+    }
+
+    private fun loadBooks() {
+        val apiService = apiclient.apiService
+        val call = apiService.getBuku()
+
+        call.enqueue(object : Callback<BukuResponse> {
+            override fun onResponse(call: Call<BukuResponse>, response: Response<BukuResponse>) {
+                val responseBody = response.body()?.toString()
+                Log.d("HomeFragment", "API Response: $responseBody")
+
+                if (response.isSuccessful) {
+                    val bukuResponse = response.body()
+                    if (bukuResponse != null && bukuResponse.status == "success") {
+                        val books = bukuResponse.data
+                        Log.d("HomeFragment", "Received ${books.size} books")
+                        books.forEach { book ->
+                            Log.d("HomeFragment", "Book: ${book.nama_buku}, ${book.deskripsi}, ${book.imageUrl}")
+                        }
+                        bookAdapter.updateBooks(books)
+                    } else {
+                        Toast.makeText(context, "Failed to load books: ${bukuResponse?.message}", Toast.LENGTH_SHORT).show()
+                    }
+                } else {
+                    Toast.makeText(context, "Failed to load books: ${response.message()}", Toast.LENGTH_SHORT).show()
+                }
+            }
+
+            override fun onFailure(call: Call<BukuResponse>, t: Throwable) {
+                Log.e("HomeFragment", "Error loading books", t)
+                Toast.makeText(context, "Error: ${t.message}", Toast.LENGTH_SHORT).show()
+            }
+        })
+    }
+
+    override fun onItemClick(book: Buku) {
+//        Toast.makeText(context, "Clicked: ${book.nama_buku}", Toast.LENGTH_SHORT).show()
+        val inflater = LayoutInflater.from(context)
+        val view = inflater.inflate(R.layout.pop_up, null)
+
+        // Find the views in the pop_up.xml layout
+        val NamaBuku = view.findViewById<TextView>(R.id.judul_buku)
+        val Deskripsi = view.findViewById<TextView>(R.id.deskripsi_buku)
+        val Image = view.findViewById<ImageView>(R.id.cover)
+        val bttnPinjam = view.findViewById<Button>(R.id.buttonPinjam)
+        val bttnList = view.findViewById<Button>(R.id.buttonList)
+
+
+        // Set the data to the views
+        NamaBuku.text = book.nama_buku
+        Deskripsi.text = book.deskripsi
+
+        // Load the image using your preferred image loading library, e.g., Glide or Picasso
+        Glide.with(this)
+            .load(book.imageUrl)
+            .into(Image)
+
+        // Create and show the dialog
+        val dialog = AlertDialog.Builder(requireContext())
+            .setView(view)
+            .create()
+
+        bttnPinjam.setOnClickListener {
+            val intent = Intent(requireContext(), ProcessPinjamActivity::class.java)
+            startActivity(intent)
+        }
+
+        bttnList.setOnClickListener {
+            val intent = Intent(requireContext(), ListFragment::class.java)
+            startActivity(intent)
+        }
+
+        dialog.show()
+    }
+}
+
+
+
+package com.example.library
+
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.ImageView
+import android.widget.TextView
+import androidx.recyclerview.widget.RecyclerView
+import com.bumptech.glide.Glide
+import com.example.library.Respon.Buku
+
+class BookAdapter(
+    private var books: List<Buku>,
+    private val itemClickListener: OnItemClickListener
+) : RecyclerView.Adapter<BookAdapter.BookViewHolder>() {
+
+    interface OnItemClickListener {
+        fun onItemClick(book: Buku)
+    }
+
+    inner class BookViewHolder(itemView: View) : RecyclerView.ViewHolder(itemView) {
+        private val titleTextView: TextView = itemView.findViewById(R.id.judul_buku)
+        private val descriptionTextView: TextView = itemView.findViewById(R.id.deskripsi_buku)
+        private val coverImageView: ImageView = itemView.findViewById(R.id.cover)
+
+        fun bind(book: Buku) {
+            titleTextView.text = book.nama_buku
+            descriptionTextView.text = book.deskripsi
+            Glide.with(itemView.context)
+                .load(book.imageUrl)
+                .into(coverImageView)
+
+            itemView.setOnClickListener {
+                itemClickListener.onItemClick(book)
+            }
+        }
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BookViewHolder {
+        val itemView = LayoutInflater.from(parent.context).inflate(R.layout.item_book, parent, false)
+        return BookViewHolder(itemView)
+    }
+
+    override fun onBindViewHolder(holder: BookViewHolder, position: Int) {
+        holder.bind(books[position])
+    }
+
+    override fun getItemCount(): Int = books.size
+
+    fun updateBooks(newBooks: List<Buku>) {
+        books = newBooks
+        notifyDataSetChanged()
+    }
+}
